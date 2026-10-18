@@ -48,14 +48,17 @@ android {
     namespace = 'org.firstinspires.ftc.teamcode'
 
     packagingOptions {
+        jniLibs {
+            pickFirsts += ['**/*.so']
+        }
         jniLibs.useLegacyPackaging true
     }
 }
 
 dependencies {
     implementation project(':FtcRobotController')
-    implementation 'com.pedropathing:ivy:0.0.1-SNAPSHOT'
-    implementation 'com.pedropathing:ftc:2.1.0-SNAPSHOT' //ll
+    implementation 'com.pedropathing:ivy:1.0.0'
+    implementation 'com.pedropathing:ftc:2.1.2' //ll
     implementation 'com.pedropathing:telemetry:1.0.0'
 
     implementation("dev.frozenmilk.sinister:Sloth:0.2.4")
