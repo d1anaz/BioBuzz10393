@@ -13,10 +13,10 @@ public class MecanumMotorDirectionTest extends OpMode {
     @Override
     public void init() {
         // Map motors (make sure these match your configuration names in the FTC Driver Station)
-        frontLeft = hardwareMap.get(DcMotor.class, "front_left_motor");
-        frontRight = hardwareMap.get(DcMotor.class, "front_right_motor");
-        backLeft = hardwareMap.get(DcMotor.class, "back_left_motor");
-        backRight = hardwareMap.get(DcMotor.class, "back_right_motor");
+        frontLeft = hardwareMap.get(DcMotor.class, "RF");
+        frontRight = hardwareMap.get(DcMotor.class, "RB");
+        backLeft = hardwareMap.get(DcMotor.class, "LB");
+        backRight = hardwareMap.get(DcMotor.class, "LF");
 
         // Optional: set motor directions (adjust these if needed after testing)
         frontLeft.setDirection(DcMotor.Direction.REVERSE);
