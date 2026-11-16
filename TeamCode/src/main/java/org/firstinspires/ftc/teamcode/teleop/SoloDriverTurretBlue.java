@@ -8,11 +8,11 @@ import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.teamcode.subsystems.AutoToTeleTransfer;
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.*;
 
 /**
@@ -157,7 +157,7 @@ public class SoloDriverTurretBlue extends OpMode {
         )));
         imu.resetYaw();
 
-        follower   = Constants.createFollower(hardwareMap);
+        follower   = Constants.create(hardwareMap);
         limelight  = new Limelight(hardwareMap, IS_RED);
         drivetrain = new Drivetrain(hardwareMap, follower, IS_RED);
         drivetrain.setLimelight(limelight);
@@ -174,12 +174,12 @@ public class SoloDriverTurretBlue extends OpMode {
     @Override
     public void start() {
         if (AutoToTeleTransfer.finalPose != null) {
-            follower.setStartingPose(AutoToTeleTransfer.finalPose);
+            follower.setPose(AutoToTeleTransfer.finalPose);
             gamepad1.rumble(500);
         } else {
-            follower.setStartingPose(new Pose(72, 8, Math.toRadians(90)));
+            follower.setPose(new Pose(72, 8, Math.toRadians(90)));
         }
-        follower.startTeleopDrive();
+        follower.manual(0, 0, 0);
 
         imu.resetYaw();
         fieldCentricOffset = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
@@ -200,7 +200,7 @@ public class SoloDriverTurretBlue extends OpMode {
         shooter.periodic();
         swm.update();
         limelight.updateMegaTag2Orientation(follower);
-        turret.update(follower.getPose());
+        turret.update(follower.pose());
 
         handleDrive();
         handleShooterToggle();
@@ -254,7 +254,10 @@ public class SoloDriverTurretBlue extends OpMode {
             rx = drivetrain.getGoalTrackingTurn();
         }
 
-        follower.setTeleOpDrive(y, -x, -rx, true);
+        // Pedro 3.x: manual() cancels paths/holds, so only drive when neither is running
+        if (!drivetrain.isHolding()) {
+            follower.manual(y, -x, -rx);
+        }
     }
 
     // =========================================================================
@@ -420,7 +423,7 @@ public class SoloDriverTurretBlue extends OpMode {
 
     private double calculateTurretSWMPosition() {
         if (!swm.isHeadingLockActive()) return turretServoPos;
-        double desiredRad = swm.getTargetHeading() - follower.getPose().getHeading();
+        double desiredRad = swm.getTargetHeading() - follower.pose().heading();
         while (desiredRad >  Math.PI) desiredRad -= 2 * Math.PI;
         while (desiredRad < -Math.PI) desiredRad += 2 * Math.PI;
         double deg = Math.toDegrees(desiredRad);
@@ -429,9 +432,9 @@ public class SoloDriverTurretBlue extends OpMode {
     }
 
     private double calculateTurretOdomPosition() {
-        Pose   p     = follower.getPose();
-        double angle = Math.toDegrees(Math.atan2(GOAL_Y - p.getY(), GOAL_X - p.getX()))
-                - Math.toDegrees(p.getHeading());
+        Pose   p     = follower.pose();
+        double angle = Math.toDegrees(Math.atan2(GOAL_Y - p.y(), GOAL_X - p.x()))
+                - Math.toDegrees(p.heading());
         while (angle >  180) angle -= 360;
         while (angle < -180) angle += 360;
         angle = Math.max(-TURRET_MAX_ANGLE, Math.min(TURRET_MAX_ANGLE, angle));
@@ -456,14 +459,14 @@ public class SoloDriverTurretBlue extends OpMode {
     private boolean isTurretAligned() {
         double desired;
         if (turretSWMMode && swm.isHeadingLockActive()) {
-            double rel = Math.toDegrees(swm.getTargetHeading() - follower.getPose().getHeading());
+            double rel = Math.toDegrees(swm.getTargetHeading() - follower.pose().heading());
             while (rel >  180) rel -= 360;
             while (rel < -180) rel += 360;
             desired = Math.max(-TURRET_MAX_ANGLE, Math.min(TURRET_MAX_ANGLE, rel));
         } else if (turretOdomTracking) {
-            Pose   p   = follower.getPose();
-            double rel = Math.toDegrees(Math.atan2(GOAL_Y - p.getY(), GOAL_X - p.getX()))
-                    - Math.toDegrees(p.getHeading());
+            Pose   p   = follower.pose();
+            double rel = Math.toDegrees(Math.atan2(GOAL_Y - p.y(), GOAL_X - p.x()))
+                    - Math.toDegrees(p.heading());
             while (rel >  180) rel -= 360;
             while (rel < -180) rel += 360;
             desired = Math.max(-TURRET_MAX_ANGLE, Math.min(TURRET_MAX_ANGLE, rel));
@@ -478,7 +481,7 @@ public class SoloDriverTurretBlue extends OpMode {
     // =========================================================================
 
     private void displayTelemetry() {
-        Pose   pose       = follower.getPose();
+        Pose   pose       = follower.pose();
         Pose   futurePose = swm.getFuturePose();
         double headingDeg = Math.toDegrees(
                 imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS) - fieldCentricOffset);
@@ -509,8 +512,8 @@ public class SoloDriverTurretBlue extends OpMode {
         telemetry.addData("│ L1 tap",  "RPM down ↓");
 
         telemetry.addLine("╠═══ POSE ═══╣");
-        telemetry.addData("│ X / Y",   "%.1f, %.1f", pose.getX(), pose.getY());
-        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.getHeading()));
+        telemetry.addData("│ X / Y",   "%.1f, %.1f", pose.x(), pose.y());
+        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.heading()));
 
         telemetry.addLine("╠═══ TURRET ═══╣");
         telemetry.addData("│ Mode",    turretModeStr);
@@ -537,7 +540,7 @@ public class SoloDriverTurretBlue extends OpMode {
         telemetry.addData("│ Ready",       swm.isReadyToShoot() ? "SHOOT NOW ✓" : "waiting");
         telemetry.addData("│ Distance",    "%.1f in", swm.getDistanceForRPM());
         telemetry.addData("│ Target Hdg",  "%.1f°", Math.toDegrees(swm.getTargetHeading()));
-        telemetry.addData("│ Future X/Y",  "%.1f, %.1f", futurePose.getX(), futurePose.getY());
+        telemetry.addData("│ Future X/Y",  "%.1f, %.1f", futurePose.x(), futurePose.y());
         telemetry.addData("│ Velocity",    "%.1f in/s", swm.getVelocityMagnitude());
 
         telemetry.addLine("╚═══════════════════════╝");

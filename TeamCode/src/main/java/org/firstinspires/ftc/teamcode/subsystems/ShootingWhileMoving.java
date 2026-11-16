@@ -1,8 +1,8 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
-import com.pedropathing.math.Vector;
+import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 public class ShootingWhileMoving {
@@ -124,10 +124,10 @@ public class ShootingWhileMoving {
         double dt = accelTimer.seconds();
         if (dt < 0.005) return;
 
-        Vector vel     = follower.getVelocity();
-        double vx      = vel.getXComponent();
-        double vy      = vel.getYComponent();
-        double heading = follower.getPose().getHeading();
+        Velocity vel     = follower.velocity();
+        double vx      = vel.vx;
+        double vy      = vel.vy;
+        double heading = follower.pose().heading();
 
         // Linear acceleration — low-pass filtered finite difference
         double rawAccelX = (vx - lastVelX) / dt;
@@ -161,11 +161,11 @@ public class ShootingWhileMoving {
     // =========================================================================
 
     private void solveVirtualGoal() {
-        Pose   robotPose = follower.getPose();
-        Vector vel       = follower.getVelocity();
-        double vx        = vel.getXComponent();
-        double vy        = vel.getYComponent();
-        double heading   = robotPose.getHeading();
+        Pose   robotPose = follower.pose();
+        Velocity vel       = follower.velocity();
+        double vx        = vel.vx;
+        double vy        = vel.vy;
+        double heading   = robotPose.heading();
         double goalX     = isRed ? RED_GOAL_X : BLUE_GOAL_X;
         double goalY     = isRed ? RED_GOAL_Y : BLUE_GOAL_Y;
 
@@ -173,14 +173,14 @@ public class ShootingWhileMoving {
         // Rotate robot-frame offset into field frame using current heading
         double cosH         = Math.cos(heading);
         double sinH         = Math.sin(heading);
-        double turretFieldX = robotPose.getX() + (TURRET_OFFSET_X * cosH - TURRET_OFFSET_Y * sinH);
-        double turretFieldY = robotPose.getY() + (TURRET_OFFSET_X * sinH + TURRET_OFFSET_Y * cosH);
+        double turretFieldX = robotPose.x() + (TURRET_OFFSET_X * cosH - TURRET_OFFSET_Y * sinH);
+        double turretFieldY = robotPose.y() + (TURRET_OFFSET_X * sinH + TURRET_OFFSET_Y * cosH);
 
         // --- Effective turret velocity (robot linear + tangential from rotation) ---
         // Tangential velocity due to robot spinning: v_tan = omega × r (cross product)
         // offset in field frame: (offsetFieldX, offsetFieldY)
-        double offsetFieldX = turretFieldX - robotPose.getX();
-        double offsetFieldY = turretFieldY - robotPose.getY();
+        double offsetFieldX = turretFieldX - robotPose.x();
+        double offsetFieldY = turretFieldY - robotPose.y();
         double turretVx     = vx + (-omega * offsetFieldY);  // -ω × r_y
         double turretVy     = vy + ( omega * offsetFieldX);  //  ω × r_x
 
@@ -229,14 +229,14 @@ public class ShootingWhileMoving {
     // =========================================================================
 
     public Pose getFuturePose() {
-        Pose   current = follower.getPose();
-        Vector vel     = follower.getVelocity();
+        Pose   current = follower.pose();
+        Velocity vel     = follower.velocity();
         double t       = BALL_TRANSFER_TIME + 0.35;  // approx total drift for display
 
         return new Pose(
-                current.getX() + (vel.getXComponent() * t) + (0.5 * accelX * t * t),
-                current.getY() + (vel.getYComponent() * t) + (0.5 * accelY * t * t),
-                current.getHeading()
+                current.x() + (vel.vx * t) + (0.5 * accelX * t * t),
+                current.y() + (vel.vy * t) + (0.5 * accelY * t * t),
+                current.heading()
         );
     }
 
@@ -246,10 +246,10 @@ public class ShootingWhileMoving {
 
     public double getDistanceForRPM() {
         if (enabled) return virtualGoalDistance;
-        Pose   pose  = follower.getPose();
+        Pose   pose  = follower.pose();
         double goalX = isRed ? RED_GOAL_X : BLUE_GOAL_X;
         double goalY = isRed ? RED_GOAL_Y : BLUE_GOAL_Y;
-        return Math.hypot(goalX - pose.getX(), goalY - pose.getY()) * 0.0254;
+        return Math.hypot(goalX - pose.x(), goalY - pose.y()) * 0.0254;
     }
 
     // =========================================================================
@@ -274,7 +274,7 @@ public class ShootingWhileMoving {
     public double  getTurretAngularVelocity() { return turretAngularVelocity; }
 
     public double getVelocityMagnitude() {
-        Vector vel = follower.getVelocity();
-        return Math.hypot(vel.getXComponent(), vel.getYComponent());
+        Velocity vel = follower.velocity();
+        return Math.hypot(vel.vx, vel.vy);
     }
 }

@@ -9,12 +9,12 @@ import com.qualcomm.robotcore.hardware.IMU;
 import com.qualcomm.robotcore.hardware.Servo;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.teamcode.subsystems.AutoPositionSubsystem;
 import org.firstinspires.ftc.teamcode.subsystems.AutoToTeleTransfer;
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.*;
 
 @TeleOp(name = "No Turret Red", group = "Competition")
@@ -104,7 +104,7 @@ public class NoTurretRedTeleOp extends OpMode {
         )));
         imu.resetYaw();
 
-        follower   = Constants.createFollower(hardwareMap);
+        follower   = Constants.create(hardwareMap);
         limelight  = new Limelight(hardwareMap, IS_RED);
         drivetrain = new Drivetrain(hardwareMap, follower, IS_RED);
         drivetrain.setLimelight(limelight);
@@ -124,12 +124,12 @@ public class NoTurretRedTeleOp extends OpMode {
     @Override
     public void start() {
         if (AutoToTeleTransfer.finalPose != null) {
-            follower.setStartingPose(AutoToTeleTransfer.finalPose);
+            follower.setPose(AutoToTeleTransfer.finalPose);
             gamepad1.rumble(500);
         } else {
-            follower.setStartingPose(new Pose(72, 8, Math.toRadians(90)));
+            follower.setPose(new Pose(72, 8, Math.toRadians(90)));
         }
-        follower.startTeleopDrive();
+        follower.manual(0, 0, 0);
 
         imu.resetYaw();
         fieldCentricOffset = imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS);
@@ -223,11 +223,14 @@ public class NoTurretRedTeleOp extends OpMode {
             rx = drivetrain.getGoalTrackingTurn();
         }
 
-        follower.setTeleOpDrive(y * speedMultiplier, -x * speedMultiplier, -rx * speedMultiplier, true);
+        // Pedro 3.x: manual() cancels paths/holds, so only drive when neither is running
+        if (!autoPos.isActive() && !drivetrain.isHolding()) {
+            follower.manual(y * speedMultiplier, -x * speedMultiplier, -rx * speedMultiplier);
+        }
     }
 
     private double calculateSWMTurnCorrection() {
-        double error      = normalizeAngle(swm.getTargetHeading() - follower.getPose().getHeading());
+        double error      = normalizeAngle(swm.getTargetHeading() - follower.pose().heading());
         double dt         = swmPidTimer.seconds();
         double derivative = (dt > 0.001) ? (error - swmLastError) / dt : 0.0;
         double turn       = Math.max(-SWM_MAX_TURN, Math.min(SWM_MAX_TURN,
@@ -346,7 +349,7 @@ public class NoTurretRedTeleOp extends OpMode {
     }
 
     private void displayTelemetry() {
-        Pose   pose       = follower.getPose();
+        Pose   pose       = follower.pose();
         double headingDeg = Math.toDegrees(
                 imu.getRobotYawPitchRollAngles().getYaw(AngleUnit.RADIANS) - fieldCentricOffset);
         boolean aligned = drivetrain.isGoalTrackingEnabled() && drivetrain.isAlignedWithGoal();
@@ -358,8 +361,8 @@ public class NoTurretRedTeleOp extends OpMode {
         telemetry.addData("│ AutoPos", autoPos.isActive() ? "ACTIVE" : "idle");
 
         telemetry.addLine("╠═══ POSE ═══╣");
-        telemetry.addData("│ X / Y",   "%.1f, %.1f", pose.getX(), pose.getY());
-        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.getHeading()));
+        telemetry.addData("│ X / Y",   "%.1f, %.1f", pose.x(), pose.y());
+        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.heading()));
 
         telemetry.addLine("╠═══ LIGHTS ═══╣");
         telemetry.addData("│ Shooter", shooter.isActive() ? "ON" : "OFF");

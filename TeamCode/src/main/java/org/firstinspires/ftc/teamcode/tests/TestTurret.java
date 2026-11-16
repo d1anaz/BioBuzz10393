@@ -3,9 +3,9 @@ package org.firstinspires.ftc.teamcode.tests;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.Limelight;
 import org.firstinspires.ftc.teamcode.subsystems.Turret;
 
@@ -21,8 +21,8 @@ public class TestTurret extends OpMode {
 
     @Override
     public void init() {
-        follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(72, 72, 0));
+        follower = Constants.create(hardwareMap);
+        follower.setPose(new Pose(72, 72, 0));
 
         limelight = new Limelight(hardwareMap, false);
         turret = new Turret(hardwareMap, limelight, false);
@@ -37,7 +37,7 @@ public class TestTurret extends OpMode {
 
     @Override
     public void start() {
-        follower.startTeleopDrive();
+        follower.manual(0, 0, 0);
         limelight.start();
     }
 
@@ -64,9 +64,9 @@ public class TestTurret extends OpMode {
         lastL2 = l2;
         lastR2 = r2;
 
-        turret.update(follower.getPose());
+        turret.update(follower.pose());
 
-        Pose pose = follower.getPose();
+        Pose pose = follower.pose();
         telemetry.addLine("╔═══ TURRET TEST ═══╗");
         telemetry.addData("│ Mode", turret.getCurrentMode());
         telemetry.addData("│ Target Angle", "%.1f°", turret.getTargetAngle());

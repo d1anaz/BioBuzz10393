@@ -1,24 +1,40 @@
 package org.firstinspires.ftc.teamcode;
 
-import com.qualcomm.hardware.gobilda.GoBildaPinpointDriver;
+import com.pedropathing.controllers.Controller;
+import com.pedropathing.follower.Follower;
+import com.pedropathing.follower.ManualDrive;
+import com.pedropathing.drivetrain.DrivePowers;
+import com.pedropathing.math.Pose;
+import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.Servo;
 
-import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
-import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 
 @TeleOp(name = "Drive", group = "TeleOp")
 public class DriveTeleOp extends OpMode {
 
     private DcMotor frontLeft, frontRight, backLeft, backRight;
     private DcMotor intake;
-    private GoBildaPinpointDriver pinpoint;
+    // Pedro Pathing follower: uses the autotuned Pinpoint + heading values from pedro/Constants.java
+    private Follower follower;
+    private Controller headingController;
 
-    // Heading hold: when the turn stick is released, the Pinpoint keeps the robot pointed the same way
-    private static final double HEADING_KP = 1.0; // raise if it still drifts, lower if it wobbles
+    // Heading lock: when the turn stick is released, Pedro keeps the robot pointed the same way
     private double targetHeading = 0;
+    private static final double SETTLE_TURN_SPEED = 0.5; // rad/s; lock starts once the robot stops spinning
+
+    // Position hold: when ALL sticks/triggers are released and the robot has stopped,
+    // Pedro holds it in that spot. Set to false to turn it off.
+    private static final boolean POSITION_HOLD = true;
+    private static final double HOLD_SPEED = 2.0; // in/s; robot must be slower than this to start holding
+
+    // Turning: the robot needs some power before it starts to rotate, so any stick push
+    // starts at TURN_MIN power and rises to TURN_MAX at full stick.
+    private static final double TURN_MIN = 0.2;  // raise if small stick pushes still don't turn
+    private static final double TURN_MAX = 1.0;  // lower if full-stick turning is too fast
 
     private double intakePower = 0;  // 0.9 = in, -0.9 = out, 0 = off
     private boolean lastDpadUp = false;
@@ -69,14 +85,10 @@ public class DriveTeleOp extends OpMode {
         armRight.setDirection(Servo.Direction.FORWARD);
         armLeft.setDirection(Servo.Direction.REVERSE); // mirrored side: must be opposite of armRight
 
-        // Name must match the I2C device in the robot configuration
-        // Offsets and directions match pedroPathing/Constants.java
-        pinpoint = hardwareMap.get(GoBildaPinpointDriver.class, "pinpoint");
-        pinpoint.setOffsets(-0.245, -3.697, DistanceUnit.INCH);
-        pinpoint.setEncoderResolution(GoBildaPinpointDriver.GoBildaOdometryPods.goBILDA_4_BAR_POD);
-        pinpoint.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD,
-                GoBildaPinpointDriver.EncoderDirection.FORWARD);
-        pinpoint.resetPosAndIMU(); // robot must be still during init
+        // Pedro sets up the drive motors and the Pinpoint from pedro/Constants.java
+        follower = Constants.create(hardwareMap);
+        follower.setPose(new Pose(0, 0, 0)); // robot must be still during init
+        headingController = Constants.foresightConfig.headingFeedback.get(); // tuned heading gain
     }
 
     @Override
@@ -101,22 +113,57 @@ public class DriveTeleOp extends OpMode {
 
     @Override
     public void loop() {
+        // Wheel test: hold a face button to spin ONE motor forward at 30%.
+        // Runs before Pedro so Pedro doesn't fight the test.
+        // Every wheel should roll toward the front of the robot.
+        if (gamepad1.y || gamepad1.b || gamepad1.x || gamepad1.a) {
+            follower.stop(); // Pedro lets go of the motors during the wheel test (no follower.update() this loop)
+            frontLeft.setPower(gamepad1.y ? 0.3 : 0);  // Y / triangle
+            frontRight.setPower(gamepad1.b ? 0.3 : 0); // B / circle
+            backLeft.setPower(gamepad1.x ? 0.3 : 0);   // X / square
+            backRight.setPower(gamepad1.a ? 0.3 : 0);  // A / cross
+            telemetry.addData("Testing", gamepad1.y ? "frontLeft (RF)" : gamepad1.b ? "frontRight (RB)"
+                    : gamepad1.x ? "backLeft (LB)" : "backRight (LF)");
+            telemetry.update();
+            return;
+        }
+
+        // Pedro directions: forward +, strafe left +, turn left (counter-clockwise) +
         double forward =  gamepad1.right_trigger - gamepad1.left_trigger; // R2 = forward, L2 = backward
-        double strafe  = -gamepad1.left_stick_x * 1.1; // left stick left/right (negated: was inverted)
-        double turn    =  gamepad1.right_stick_x;        // right stick right/right
+        double strafe  = -gamepad1.left_stick_x;  // left stick: push right = strafe right
+        double turnIn  = -gamepad1.right_stick_x; // right stick: push right = turn right
 
-        pinpoint.update();
-        double heading = pinpoint.getHeading(AngleUnit.RADIANS);
+        follower.update(); // reads the Pinpoint and drives the motors
+        Pose pose = follower.pose();
+        double heading = pose.heading();
+        Velocity vel = follower.velocity();
+        double speed = Math.hypot(vel.vx, vel.vy);
 
-        if (Math.abs(turn) > 0.05) {
-            // Driver is turning: follow them and remember the new direction
+        boolean turning  = Math.abs(turnIn) > 0.05;
+        boolean driving  = Math.abs(forward) > 0.05 || Math.abs(strafe) > 0.05;
+        String driveMode;
+
+        if (turning) {
+            // Driver is turning: boost so it starts turning right away, and remember the new direction
+            double turn = Math.signum(turnIn) * (TURN_MIN + (TURN_MAX - TURN_MIN) * (Math.abs(turnIn) - 0.05) / 0.95);
             targetHeading = heading;
-        } else if (Math.abs(forward) > 0.05 || Math.abs(strafe) > 0.05) {
-            // Driving without turning: push back toward the remembered direction
-            double error = Math.atan2(Math.sin(targetHeading - heading), Math.cos(targetHeading - heading));
-            turn = -error * HEADING_KP; // flip to +error if it spins away instead of correcting
+            follower.manual(forward, strafe, turn);
+            driveMode = "TURNING";
+        } else if (Math.abs(vel.omega) > SETTLE_TURN_SPEED) {
+            // Just let go of the turn stick and still spinning: let it stop before locking
+            targetHeading = heading;
+            follower.manual(forward, strafe, 0);
+            driveMode = "SETTLING";
+        } else if (driving || !POSITION_HOLD || speed > HOLD_SPEED) {
+            // Driving without turning: Pedro's heading lock keeps it pointed at targetHeading
+            DrivePowers powers = ManualDrive.headingLock(follower, headingController,
+                    new DrivePowers(forward, strafe, 0), targetHeading);
+            follower.manual(powers);
+            driveMode = "HEADING LOCK";
         } else {
-            targetHeading = heading;
+            // Sticks released and robot stopped: hold this spot (starts once, then Pedro keeps it there)
+            if (!follower.holding()) follower.hold(new Pose(pose.x(), pose.y(), targetHeading));
+            driveMode = "POSITION HOLD";
         }
 
         // D-pad up = intake forward, D-pad down = reverse; press the same button again to stop
@@ -131,39 +178,18 @@ public class DriveTeleOp extends OpMode {
         if (gamepad1.dpad_left)  armUp = false;
         setArm();
 
-        // Wheel test: hold a face button to spin ONE motor forward at 30%.
-        // Every wheel should roll toward the front of the robot.
-        if (gamepad1.y || gamepad1.b || gamepad1.x || gamepad1.a) {
-            frontLeft.setPower(gamepad1.y ? 0.3 : 0);  // Y / triangle
-            frontRight.setPower(gamepad1.b ? 0.3 : 0); // B / circle
-            backLeft.setPower(gamepad1.x ? 0.3 : 0);   // X / square
-            backRight.setPower(gamepad1.a ? 0.3 : 0);  // A / cross
-            telemetry.addData("Testing", gamepad1.y ? "frontLeft (RF)" : gamepad1.b ? "frontRight (RB)"
-                    : gamepad1.x ? "backLeft (LB)" : "backRight (LF)");
-            telemetry.update();
-            return;
-        }
-
-        // Scale so no motor power goes above 1
-        double max = Math.max(Math.abs(forward) + Math.abs(strafe) + Math.abs(turn), 1);
-
-        frontLeft.setPower((forward + strafe + turn) / max);
-        backLeft.setPower((forward - strafe + turn) / max);
-        frontRight.setPower((forward - strafe - turn) / max);
-        backRight.setPower((forward + strafe - turn) / max);
-
-        telemetry.addData("Forward", "%.2f", forward);
-        telemetry.addData("Strafe", "%.2f", strafe);
-        telemetry.addData("Turn", "%.2f", turn);
+        telemetry.addData("Drive", driveMode);
+        telemetry.addData("Forward / Strafe / Turn", "%.2f / %.2f / %.2f", forward, strafe, turnIn);
         telemetry.addData("Intake", intakePower > 0 ? "FORWARD" : intakePower < 0 ? "REVERSE" : "OFF");
         telemetry.addData("Arm", armUp ? "UP" : "DOWN");
         telemetry.addData("Heading (deg)", "%.1f", Math.toDegrees(heading));
         telemetry.addData("Target (deg)", "%.1f", Math.toDegrees(targetHeading));
-        telemetry.addData("X / Y (in)", "%.1f / %.1f", pinpoint.getPosX(DistanceUnit.INCH), pinpoint.getPosY(DistanceUnit.INCH));
+        telemetry.addData("X / Y (in)", "%.1f / %.1f", pose.x(), pose.y());
         telemetry.update();
     }
     @Override
     public void stop() {
+        follower.stop();
         frontLeft.setPower(0);
         frontRight.setPower(0);
         backLeft.setPower(0);

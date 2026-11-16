@@ -1,8 +1,8 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.BezierPoint;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.follower.ManualDrive;
+import com.pedropathing.math.Pose;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -53,7 +53,7 @@ public class Drivetrain {
     public Drivetrain(HardwareMap hardwareMap, Follower follower, boolean isRed) {
         this.follower = follower;
         this.isRed    = isRed;
-        fieldCentricOffset = follower.getPose().getHeading();
+        fieldCentricOffset = follower.pose().heading();
         GOAL_POSE = isRed
                 ? new Pose(RED_GOAL_X,  RED_GOAL_Y,  0)
                 : new Pose(BLUE_GOAL_X, BLUE_GOAL_Y, 0);
@@ -73,7 +73,7 @@ public class Drivetrain {
         }
         if (isHolding) return;
 
-        double botHeading = follower.getPose().getHeading() - fieldCentricOffset;
+        double botHeading = follower.pose().heading() - fieldCentricOffset;
 
         double x    = strafe;
         double y    = forward;
@@ -86,7 +86,7 @@ public class Drivetrain {
         turn *= driveSpeed;
 
         if (headingLockEnabled) {
-            double currentHeading = follower.getPose().getHeading();
+            double currentHeading = follower.pose().heading();
             double headingError   = normalizeAngle(lockedHeading - currentHeading);
             turn = headingError * HEADING_LOCK_P;
         } else if (goalTrackingEnabled && !hasSignificantTurnInput(turn / driveSpeed)) {
@@ -96,14 +96,15 @@ public class Drivetrain {
             pidTimer.reset();
         }
 
-        follower.setTeleOpDrive(rotX, rotY, -turn, false);
+        // Field-centric (same as the old setTeleOpDrive(..., false))
+        follower.manual(ManualDrive.fieldCentric(rotX, rotY, -turn, follower.pose().heading()));
     }
 
     // ========== GOAL TRACKING PD ==========
 
     private double calculateGoalTrackingTurnPD() {
-        Pose   currentPose    = follower.getPose();
-        double currentHeading = currentPose.getHeading();
+        Pose   currentPose    = follower.pose();
+        double currentHeading = currentPose.heading();
         double targetHeading;
 
         if (visionAssistEnabled && limelight != null) {
@@ -112,14 +113,14 @@ public class Drivetrain {
                 targetHeading = currentHeading + Math.toRadians(tx);
             } else {
                 targetHeading = Math.atan2(
-                        GOAL_POSE.getY() - currentPose.getY(),
-                        GOAL_POSE.getX() - currentPose.getX()
+                        GOAL_POSE.y() - currentPose.y(),
+                        GOAL_POSE.x() - currentPose.x()
                 );
             }
         } else {
             targetHeading = Math.atan2(
-                    GOAL_POSE.getY() - currentPose.getY(),
-                    GOAL_POSE.getX() - currentPose.getX()
+                    GOAL_POSE.y() - currentPose.y(),
+                    GOAL_POSE.x() - currentPose.x()
             );
         }
 
@@ -146,8 +147,8 @@ public class Drivetrain {
     public boolean isAlignedWithGoal() {
         if (!goalTrackingEnabled) return false;
 
-        Pose   currentPose    = follower.getPose();
-        double currentHeading = currentPose.getHeading();
+        Pose   currentPose    = follower.pose();
+        double currentHeading = currentPose.heading();
         double error;
 
         if (visionAssistEnabled && limelight != null) {
@@ -156,15 +157,15 @@ public class Drivetrain {
                 error = Math.abs(Math.toRadians(tx));
             } else {
                 double targetHeading = Math.atan2(
-                        GOAL_POSE.getY() - currentPose.getY(),
-                        GOAL_POSE.getX() - currentPose.getX()
+                        GOAL_POSE.y() - currentPose.y(),
+                        GOAL_POSE.x() - currentPose.x()
                 );
                 error = Math.abs(normalizeAngle(targetHeading - currentHeading));
             }
         } else {
             double targetHeading = Math.atan2(
-                    GOAL_POSE.getY() - currentPose.getY(),
-                    GOAL_POSE.getX() - currentPose.getX()
+                    GOAL_POSE.y() - currentPose.y(),
+                    GOAL_POSE.x() - currentPose.x()
             );
             error = Math.abs(normalizeAngle(targetHeading - currentHeading));
         }
@@ -195,14 +196,15 @@ public class Drivetrain {
         if (isHolding) {
             releaseHold();
         } else {
-            follower.holdPoint(new BezierPoint(follower.getPose()), follower.getPose().getHeading());
+            follower.holdEnd.set(true);
+            follower.hold(follower.pose());
             isHolding = true;
         }
     }
 
     public void releaseHold() {
         isHolding = false;
-        follower.startTeleopDrive();
+        follower.manual(0, 0, 0);
     }
 
     public boolean isHolding() { return isHolding; }
@@ -226,7 +228,7 @@ public class Drivetrain {
 
     // ========== FIELD-CENTRIC ==========
     public void resetFieldCentric() {
-        fieldCentricOffset = follower.getPose().getHeading();
+        fieldCentricOffset = follower.pose().heading();
     }
 
     // ========== SPEED ==========
@@ -235,7 +237,7 @@ public class Drivetrain {
     public double getSpeed()    { return driveSpeed; }
 
     public void stop() {
-        follower.setTeleOpDrive(0, 0, 0, true);
+        follower.manual(0, 0, 0);
     }
 
     private double normalizeAngle(double angle) {

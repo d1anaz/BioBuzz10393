@@ -5,7 +5,7 @@ import com.qualcomm.hardware.limelightvision.LLResultTypes;
 import com.qualcomm.hardware.limelightvision.Limelight3A;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose3D;
@@ -120,7 +120,7 @@ public class Limelight {
     }
 
     public void updateMegaTag2Orientation(Follower follower) {
-        double robotYaw = Math.toDegrees(follower.getHeading());
+        double robotYaw = Math.toDegrees(follower.pose().heading());
         limelight.updateRobotOrientation(robotYaw);
     }
 

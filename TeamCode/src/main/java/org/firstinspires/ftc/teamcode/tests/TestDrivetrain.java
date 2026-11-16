@@ -3,9 +3,9 @@ package org.firstinspires.ftc.teamcode.tests;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.Drivetrain;
 
 @TeleOp(name = "Test: Drivetrain", group = "Tests")
@@ -19,8 +19,8 @@ public class TestDrivetrain extends OpMode {
 
     @Override
     public void init() {
-        follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(72, 72, 0));
+        follower = Constants.create(hardwareMap);
+        follower.setPose(new Pose(72, 72, 0));
 
         drivetrain = new Drivetrain(hardwareMap, follower, false);
 
@@ -37,7 +37,7 @@ public class TestDrivetrain extends OpMode {
 
     @Override
     public void start() {
-        follower.startTeleopDrive();
+        follower.manual(0, 0, 0);
     }
 
     @Override
@@ -75,11 +75,11 @@ public class TestDrivetrain extends OpMode {
 
         drivetrain.drive(forward, strafe, turn);
 
-        Pose pose = follower.getPose();
+        Pose pose = follower.pose();
         telemetry.addLine("╔═══ DRIVETRAIN TEST ═══╗");
-        telemetry.addData("│ X", "%.1f", pose.getX());
-        telemetry.addData("│ Y", "%.1f", pose.getY());
-        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.getHeading()));
+        telemetry.addData("│ X", "%.1f", pose.x());
+        telemetry.addData("│ Y", "%.1f", pose.y());
+        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.heading()));
         telemetry.addData("│ Speed", "%.0f%%", drivetrain.getSpeed() * 100);
         telemetry.addData("│ Holding", drivetrain.isHolding() ? "YES" : "NO");
         telemetry.addLine("╚══════════════════════╝");

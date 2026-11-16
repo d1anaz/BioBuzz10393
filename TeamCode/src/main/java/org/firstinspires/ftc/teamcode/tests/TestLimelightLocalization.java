@@ -4,9 +4,9 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.util.ElapsedTime;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.Drivetrain;
 import org.firstinspires.ftc.teamcode.subsystems.Limelight;
 
@@ -31,11 +31,11 @@ public class TestLimelightLocalization extends OpMode {
 
     @Override
     public void init() {
-        follower = Constants.createFollower(hardwareMap);
+        follower = Constants.create(hardwareMap);
         limelight = new Limelight(hardwareMap, false); // Blue alliance
         drivetrain = new Drivetrain(hardwareMap, follower, false);
 
-        follower.setStartingPose(new Pose(72, 72, Math.toRadians(90)));
+        follower.setPose(new Pose(72, 72, Math.toRadians(90)));
 
         telemetry.addLine("╔═══ LIMELIGHT MT2 TEST ═══╗");
         telemetry.addLine("│ D-Up:  MegaTag2 Localize  │");
@@ -48,7 +48,7 @@ public class TestLimelightLocalization extends OpMode {
 
     @Override
     public void start() {
-        follower.startTeleopDrive();
+        follower.manual(0, 0, 0);
         limelight.start();
         runtime.reset();
     }
@@ -62,18 +62,18 @@ public class TestLimelightLocalization extends OpMode {
 
         // MegaTag2 localize on button press
         if (gamepad1.dpad_up && !lastDpadUp) {
-            Pose before = follower.getPose();
+            Pose before = follower.pose();
             boolean success = limelight.megaTag2Localize(follower);
 
             if (success) {
-                Pose after = follower.getPose();
+                Pose after = follower.pose();
                 megaTag2Count++;
-                lastMT2X = after.getX();
-                lastMT2Y = after.getY();
+                lastMT2X = after.x();
+                lastMT2Y = after.y();
                 lastMT2Time = runtime.seconds();
 
                 // Show correction delta via rumble duration
-                double delta = Math.hypot(after.getX() - before.getX(), after.getY() - before.getY());
+                double delta = Math.hypot(after.x() - before.x(), after.y() - before.y());
                 gamepad1.rumble(delta > 5.0 ? 1000 : 400); // Long = big correction, short = small
             } else {
                 megaTag2FailCount++;
@@ -115,7 +115,7 @@ public class TestLimelightLocalization extends OpMode {
     }
 
     private void displayTelemetry() {
-        Pose pose = follower.getPose();
+        Pose pose = follower.pose();
         int tagCount = limelight.getVisibleTagCount();
         boolean alignTag = limelight.isAlignmentTagVisible();
 
@@ -135,9 +135,9 @@ public class TestLimelightLocalization extends OpMode {
         telemetry.addData("│ MT2 Ready",       mt2Status);
 
         telemetry.addLine("╠═══ CURRENT POSE (Odometry) ═══╣");
-        telemetry.addData("│ X",       "%.2f in", pose.getX());
-        telemetry.addData("│ Y",       "%.2f in", pose.getY());
-        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.getHeading()));
+        telemetry.addData("│ X",       "%.2f in", pose.x());
+        telemetry.addData("│ Y",       "%.2f in", pose.y());
+        telemetry.addData("│ Heading", "%.1f°", Math.toDegrees(pose.heading()));
 
         telemetry.addLine("╠═══ MEGATAG2 STATS ═══╣");
         telemetry.addData("│ Successes", megaTag2Count);

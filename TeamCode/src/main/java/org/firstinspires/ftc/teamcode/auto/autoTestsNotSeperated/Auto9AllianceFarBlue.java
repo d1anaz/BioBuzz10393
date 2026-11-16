@@ -1,5 +1,8 @@
 package org.firstinspires.ftc.teamcode.auto.autoTestsNotSeperated;
 
+import static com.pedropathing.api.Paths.line;
+import static com.pedropathing.api.Paths.curve;
+
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.util.ElapsedTime;
@@ -8,7 +11,7 @@ import com.bylazar.telemetry.TelemetryManager;
 import com.bylazar.telemetry.PanelsTelemetry;
 import java.util.Locale;
 
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.AutoToTeleTransfer;
 import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.subsystems.Shooter;
@@ -17,10 +20,8 @@ import org.firstinspires.ftc.teamcode.subsystems.Turret;
 import org.firstinspires.ftc.teamcode.subsystems.Limelight;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.BezierCurve;
-import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.geometry.Pose;
-import com.pedropathing.paths.PathChain;
+import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
 
 /**
  * Auto9AllianceFarBlue — 9-ball alliance far-side autonomous, BLUE.
@@ -133,8 +134,8 @@ public class Auto9AllianceFarBlue extends OpMode {
     @Override
     public void init() {
         panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
-        follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(56, 8, Math.toRadians(90)));
+        follower = Constants.create(hardwareMap);
+        follower.setPose(new Pose(56, 8, Math.toRadians(90)));
         limelight = new Limelight(hardwareMap, IS_RED);
         intake    = new Intake(hardwareMap);
         shooter   = new Shooter(hardwareMap);
@@ -155,20 +156,20 @@ public class Auto9AllianceFarBlue extends OpMode {
         turretPidTimer.reset();
         spinupTimer.reset();
         state = AutoState.INITIAL_SPINUP;
-        AutoToTeleTransfer.finalPose = follower.getPose();
+        AutoToTeleTransfer.finalPose = follower.pose();
     }
 
     @Override
     public void loop() {
         follower.update();
         shooter.periodic();
-        turret.update(follower.getPose());
+        turret.update(follower.pose());
         updateTurretOdom();
         lights.update(shooter.isActive(), shooter.getRPMMode(), isAligned());
         autonomousUpdate();
-        AutoToTeleTransfer.finalPose = follower.getPose();
+        AutoToTeleTransfer.finalPose = follower.pose();
         panelsTelemetry.debug("State",     state.name());
-        panelsTelemetry.debug("T",         String.format(Locale.US, "%.3f", follower.getCurrentTValue()));
+        panelsTelemetry.debug("T",         String.format(Locale.US, "%.3f", follower.parametricCompletion()));
         panelsTelemetry.debug("PathTimer", String.format(Locale.US, "%.2f / %.1f", pathTimer.seconds(), currentPathTimeout));
         panelsTelemetry.debug("Shoot",     String.format(Locale.US, "%.0f / %.0f ms", shootTimer.milliseconds(), SHOOT_MS));
         panelsTelemetry.debug("RPM Tgt",   shooter.getTargetRPM());
@@ -177,24 +178,24 @@ public class Auto9AllianceFarBlue extends OpMode {
         panelsTelemetry.debug("Intake",    intake.getCurrentMode().toString());
         panelsTelemetry.debug("TurretSrv", String.format(Locale.US, "%.3f", turretServoPos));
         panelsTelemetry.debug("Aligned",   isTurretAligned());
-        panelsTelemetry.debug("X",         follower.getPose().getX());
-        panelsTelemetry.debug("Y",         follower.getPose().getY());
+        panelsTelemetry.debug("X",         follower.pose().x());
+        panelsTelemetry.debug("Y",         follower.pose().y());
         panelsTelemetry.update(telemetry);
     }
 
     @Override
     public void stop() {
         shooter.stop(); intake.stop(); lights.off();
-        AutoToTeleTransfer.finalPose = follower.getPose();
+        AutoToTeleTransfer.finalPose = follower.pose();
     }
 
     // =========================================================================
     //  TURRET ODOM TRACKING
     // =========================================================================
     private void updateTurretOdom() {
-        Pose p = follower.getPose();
-        double angle = Math.toDegrees(Math.atan2(GOAL_Y - p.getY(), GOAL_X - p.getX()))
-                - Math.toDegrees(p.getHeading());
+        Pose p = follower.pose();
+        double angle = Math.toDegrees(Math.atan2(GOAL_Y - p.y(), GOAL_X - p.x()))
+                - Math.toDegrees(p.heading());
         while (angle >  180) angle -= 360;
         while (angle < -180) angle += 360;
         angle = Math.max(-TURRET_MAX_ANGLE, Math.min(TURRET_MAX_ANGLE, angle));
@@ -215,9 +216,9 @@ public class Auto9AllianceFarBlue extends OpMode {
     }
 
     private boolean isTurretAligned() {
-        Pose p = follower.getPose();
-        double rel = Math.toDegrees(Math.atan2(GOAL_Y - p.getY(), GOAL_X - p.getX()))
-                - Math.toDegrees(p.getHeading());
+        Pose p = follower.pose();
+        double rel = Math.toDegrees(Math.atan2(GOAL_Y - p.y(), GOAL_X - p.x()))
+                - Math.toDegrees(p.heading());
         while (rel >  180) rel -= 360;
         while (rel < -180) rel += 360;
         double desired = Math.max(-TURRET_MAX_ANGLE, Math.min(TURRET_MAX_ANGLE, rel));
@@ -227,11 +228,11 @@ public class Auto9AllianceFarBlue extends OpMode {
     // =========================================================================
     //  PATH HELPERS
     // =========================================================================
-    private void followShoot(PathChain p, double t)  { follower.setMaxPower(SHOOT_PATH_SPEED);  follower.followPath(p, true);  pathTimer.reset(); currentPathTimeout = t; }
-    private void followIntake(PathChain p, double t) { follower.setMaxPower(INTAKE_PATH_SPEED); follower.followPath(p, false); pathTimer.reset(); currentPathTimeout = t; }
-    private void followLeave(PathChain p, double t)  { follower.setMaxPower(LEAVE_PATH_SPEED);  follower.followPath(p, false); pathTimer.reset(); currentPathTimeout = t; }
+    private void followShoot(Path p, double t)  { Constants.setMaxPathPower(SHOOT_PATH_SPEED);  follower.holdEnd.set(true); follower.follow(p);  pathTimer.reset(); currentPathTimeout = t; }
+    private void followIntake(Path p, double t) { Constants.setMaxPathPower(INTAKE_PATH_SPEED); follower.holdEnd.set(false); follower.follow(p); pathTimer.reset(); currentPathTimeout = t; }
+    private void followLeave(Path p, double t)  { Constants.setMaxPathPower(LEAVE_PATH_SPEED);  follower.holdEnd.set(false); follower.follow(p); pathTimer.reset(); currentPathTimeout = t; }
 
-    private boolean pathDone()      { return follower.getCurrentTValue() >= 0.95 || !follower.isBusy() || pathTimer.seconds() >= currentPathTimeout; }
+    private boolean pathDone()      { return follower.parametricCompletion() >= 0.95 || !follower.isBusy() || pathTimer.seconds() >= currentPathTimeout; }
     private boolean shootPathDone() { return !follower.isBusy() || pathTimer.seconds() >= currentPathTimeout; }
 
     // =========================================================================
@@ -397,48 +398,32 @@ public class Auto9AllianceFarBlue extends OpMode {
     //  PATHS — Blue (doc 5)
     // =========================================================================
     public static class Paths {
-        public PathChain shoot0, intake1, shoot1, intake2, shoot2, intake3, shoot3, Leave;
+        public Path shoot0, intake1, shoot1, intake2, shoot2, intake3, shoot3, Leave;
 
         public Paths(Follower f) {
-            shoot0 = f.pathBuilder()
-                    .addPath(new BezierLine(new Pose(56.000, 8.000), new Pose(56.000, 16.895)))
-                    .setTangentHeadingInterpolation().build();
+            shoot0 = line(new Pose(56.000, 8.000), new Pose(56.000, 16.895)).tangent();
 
-            intake1 = f.pathBuilder()
-                    .addPath(new BezierCurve(
+            intake1 = curve(
                             new Pose(56.000, 16.895), new Pose(57.395, 41.842),
-                            new Pose(39.605, 33.579), new Pose(13.316, 35.421)))
-                    .setTangentHeadingInterpolation().build();
+                            new Pose(39.605, 33.579), new Pose(13.316, 35.421)).tangent();
 
-            shoot1 = f.pathBuilder()
-                    .addPath(new BezierCurve(
+            shoot1 = curve(
                             new Pose(13.316, 35.421), new Pose(46.474, 33.079),
-                            new Pose(47.711, 25.553), new Pose(57.842, 12.211)))
-                    .setTangentHeadingInterpolation().setReversed().build();
+                            new Pose(47.711, 25.553), new Pose(57.842, 12.211)).reverseTangent();
 
-            intake2 = f.pathBuilder()
-                    .addPath(new BezierCurve(
-                            new Pose(57.842, 12.211), new Pose(38.105, 7.947), new Pose(9.158, 8.053)))
-                    .setTangentHeadingInterpolation().build();
+            intake2 = curve(
+                            new Pose(57.842, 12.211), new Pose(38.105, 7.947), new Pose(9.158, 8.053)).tangent();
 
-            shoot2 = f.pathBuilder()
-                    .addPath(new BezierCurve(
+            shoot2 = curve(
                             new Pose(9.158, 8.053), new Pose(31.184, 7.421),
-                            new Pose(54.184, 17.842), new Pose(57.842, 12.053)))
-                    .setTangentHeadingInterpolation().setReversed().build();
+                            new Pose(54.184, 17.842), new Pose(57.842, 12.053)).reverseTangent();
 
-            intake3 = f.pathBuilder()
-                    .addPath(new BezierLine(new Pose(57.842, 12.053), new Pose(9.632, 12.158)))
-                    .setTangentHeadingInterpolation().build();
+            intake3 = line(new Pose(57.842, 12.053), new Pose(9.632, 12.158)).tangent();
 
-            shoot3 = f.pathBuilder()
-                    .addPath(new BezierCurve(
-                            new Pose(9.632, 12.158), new Pose(56.263, 16.368), new Pose(57.526, 13.579)))
-                    .setTangentHeadingInterpolation().setReversed().build();
+            shoot3 = curve(
+                            new Pose(9.632, 12.158), new Pose(56.263, 16.368), new Pose(57.526, 13.579)).reverseTangent();
 
-            Leave = f.pathBuilder()
-                    .addPath(new BezierLine(new Pose(57.526, 13.579), new Pose(38.211, 13.421)))
-                    .setTangentHeadingInterpolation().build();
+            Leave = line(new Pose(57.526, 13.579), new Pose(38.211, 13.421)).tangent();
         }
     }
 }

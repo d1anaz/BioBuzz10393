@@ -1,12 +1,14 @@
 package org.firstinspires.ftc.teamcode.subsystems;
 
+import static com.pedropathing.api.Paths.line;
+import static com.pedropathing.api.Paths.curve;
+
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.BezierCurve;
-import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
-import com.pedropathing.paths.PathChain;
 import com.qualcomm.robotcore.util.ElapsedTime;
+
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 
 public class AutoPositionSubsystem {
 
@@ -33,9 +35,9 @@ public class AutoPositionSubsystem {
     private static final Pose BLUE_CLOSE_SHOOT = new Pose(57.766,  86.731, Math.toRadians(134));
     private static final Pose BLUE_FAR_SHOOT   = new Pose(57,      12,     Math.toRadians(111));
 
-    private static final Pose RED_PARK        = BLUE_PARK.mirror();
-    private static final Pose RED_CLOSE_SHOOT = BLUE_CLOSE_SHOOT.mirror();
-    private static final Pose RED_FAR_SHOOT   = BLUE_FAR_SHOOT.mirror();
+    private static final Pose RED_PARK        = Constants.mirror(BLUE_PARK);
+    private static final Pose RED_CLOSE_SHOOT = Constants.mirror(BLUE_CLOSE_SHOOT);
+    private static final Pose RED_FAR_SHOOT   = Constants.mirror(BLUE_FAR_SHOOT);
 
     // ─── Gate cycle poses ─────────────────────────────────────────────────────
     // Red
@@ -55,21 +57,21 @@ public class AutoPositionSubsystem {
 
     public void goToCloseShoot() {
         Pose target = isRed ? RED_CLOSE_SHOOT : BLUE_CLOSE_SHOOT;
-        follower.followPath(buildPath(target));
+        follower.holdEnd.set(true); follower.follow(buildPath(target));
         state = State.MOVING;
         timer.reset();
     }
 
     public void goToFarShoot() {
         Pose target = isRed ? RED_FAR_SHOOT : BLUE_FAR_SHOOT;
-        follower.followPath(buildPath(target));
+        follower.holdEnd.set(true); follower.follow(buildPath(target));
         state = State.MOVING;
         timer.reset();
     }
 
     public void goToPark() {
         Pose target = isRed ? RED_PARK : BLUE_PARK;
-        follower.followPath(buildPath(target));
+        follower.holdEnd.set(true); follower.follow(buildPath(target));
         state = State.MOVING;
         timer.reset();
     }
@@ -86,7 +88,7 @@ public class AutoPositionSubsystem {
      *       line  (13,59.474) → (13,52.842)           heading 155°→120°
      */
     public void goToGateCycle() {
-        follower.followPath(buildGateOpenPath(), true);
+        follower.holdEnd.set(true); follower.follow(buildGateOpenPath());
         state = State.GATE_OPEN;
         timer.reset();
     }
@@ -94,8 +96,8 @@ public class AutoPositionSubsystem {
     /** Cancel any active movement immediately and return to teleop drive. */
     public void cancel() {
         if (state != State.IDLE) {
-            follower.breakFollowing();
-            follower.startTeleopDrive();
+            follower.stop();
+            follower.manual(0, 0, 0);
             state = State.IDLE;
         }
     }
@@ -129,7 +131,7 @@ public class AutoPositionSubsystem {
             case GATE_DWELL:
                 // Robot holds position while gate opens
                 if (timer.milliseconds() >= GATE_DWELL_MS) {
-                    follower.followPath(buildGateIntakePath(), true);
+                    follower.holdEnd.set(true); follower.follow(buildGateIntakePath());
                     state = State.GATE_INTAKE;
                     timer.reset();
                 }
@@ -146,52 +148,37 @@ public class AutoPositionSubsystem {
 
     // ─── Path builders ────────────────────────────────────────────────────────
 
-    private PathChain buildPath(Pose target) {
-        return follower.pathBuilder()
-                .addPath(new Path(new BezierLine(follower.getPose(), target)))
-                .setConstantHeadingInterpolation(target.getHeading())
-                .build();
+    private Path buildPath(Pose target) {
+        return line(follower.pose(), target).constant(target.heading());
     }
 
-    private PathChain buildGateOpenPath() {
+    private Path buildGateOpenPath() {
         if (isRed) {
-            return follower.pathBuilder()
-                    .addPath(new Path(new BezierCurve(
+            return curve(
                             new Pose(87.053,  77.211),
                             new Pose(101.974, 63.921),
                             new Pose(131.000, 59.474)
-                    )))
-                    .setLinearHeadingInterpolation(Math.toRadians(47), Math.toRadians(25))
-                    .build();
+                    ).linear(Math.toRadians(47), Math.toRadians(25));
         } else {
-            return follower.pathBuilder()
-                    .addPath(new Path(new BezierCurve(
+            return curve(
                             new Pose(56.947, 77.211),
                             new Pose(42.026, 63.921),
                             new Pose(13.000, 59.474)
-                    )))
-                    .setLinearHeadingInterpolation(Math.toRadians(133), Math.toRadians(155))
-                    .build();
+                    ).linear(Math.toRadians(133), Math.toRadians(155));
         }
     }
 
-    private PathChain buildGateIntakePath() {
+    private Path buildGateIntakePath() {
         if (isRed) {
-            return follower.pathBuilder()
-                    .addPath(new Path(new BezierLine(RED_GATE_START, RED_GATE_END)))
-                    .setLinearHeadingInterpolation(
-                            RED_GATE_START.getHeading(),
-                            RED_GATE_END.getHeading()
-                    )
-                    .build();
+            return line(RED_GATE_START, RED_GATE_END).linear(
+                            RED_GATE_START.heading(),
+                            RED_GATE_END.heading()
+                    );
         } else {
-            return follower.pathBuilder()
-                    .addPath(new Path(new BezierLine(BLUE_GATE_START, BLUE_GATE_END)))
-                    .setLinearHeadingInterpolation(
-                            BLUE_GATE_START.getHeading(),
-                            BLUE_GATE_END.getHeading()
-                    )
-                    .build();
+            return line(BLUE_GATE_START, BLUE_GATE_END).linear(
+                            BLUE_GATE_START.heading(),
+                            BLUE_GATE_END.heading()
+                    );
         }
     }
 }

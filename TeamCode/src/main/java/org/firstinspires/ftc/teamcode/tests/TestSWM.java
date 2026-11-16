@@ -3,9 +3,9 @@ package org.firstinspires.ftc.teamcode.tests;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.*;
 
 @TeleOp(name = "Test: Shooting While Moving", group = "Tests")
@@ -22,8 +22,8 @@ public class TestSWM extends OpMode {
 
     @Override
     public void init() {
-        follower = Constants.createFollower(hardwareMap);
-        follower.setStartingPose(new Pose(50, 20, Math.toRadians(113.5)));
+        follower = Constants.create(hardwareMap);
+        follower.setPose(new Pose(50, 20, Math.toRadians(113.5)));
 
         limelight = new Limelight(hardwareMap, false);
         drivetrain = new Drivetrain(hardwareMap, follower, false);
@@ -40,7 +40,7 @@ public class TestSWM extends OpMode {
 
     @Override
     public void start() {
-        follower.startTeleopDrive();
+        follower.manual(0, 0, 0);
         limelight.start();
         shooter.spin(); // Enable shooter for testing
     }
@@ -67,21 +67,21 @@ public class TestSWM extends OpMode {
         // Update subsystems
         shooter.periodic();
         turret.setMode(Turret.Mode.ODOMETRY);
-        turret.update(follower.getPose());
+        turret.update(follower.pose());
         swm.update();
 
-        Pose pose = follower.getPose();
+        Pose pose = follower.pose();
         Pose future = swm.getFuturePose();
 
         telemetry.addLine("╔═══ SWM TEST ═══╗");
         telemetry.addData("│ SWM Enabled", swm.isEnabled() ? "YES" : "NO");
         telemetry.addData("│ H-Lock Active", swm.isHeadingLockActive() ? "YES" : "NO");
         telemetry.addLine("╠═══ CURRENT POSE ═══╣");
-        telemetry.addData("│ X", "%.1f", pose.getX());
-        telemetry.addData("│ Y", "%.1f", pose.getY());
+        telemetry.addData("│ X", "%.1f", pose.x());
+        telemetry.addData("│ Y", "%.1f", pose.y());
         telemetry.addLine("╠═══ FUTURE POSE ═══╣");
-        telemetry.addData("│ X", "%.1f", future.getX());
-        telemetry.addData("│ Y", "%.1f", future.getY());
+        telemetry.addData("│ X", "%.1f", future.x());
+        telemetry.addData("│ Y", "%.1f", future.y());
         telemetry.addLine("╠═══ SHOOTER ═══╣");
         telemetry.addData("│ At Speed", shooter.isAtSpeed() ? "YES" : "NO");
         telemetry.addLine("╠═══ TURRET ═══╣");

@@ -2,7 +2,7 @@ package org.firstinspires.ftc.teamcode.subsystems;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 public class Turret {
 
@@ -80,11 +80,11 @@ public class Turret {
         double goalX = isRed ? RED_GOAL_X : BLUE_GOAL_X;
         double goalY = isRed ? RED_GOAL_Y : BLUE_GOAL_Y;
 
-        double dx = goalX - pose.getX();
-        double dy = goalY - pose.getY();
+        double dx = goalX - pose.x();
+        double dy = goalY - pose.y();
 
         double globalAngleToGoal = Math.toDegrees(Math.atan2(dy, dx));
-        double robotHeading      = Math.toDegrees(pose.getHeading());
+        double robotHeading      = Math.toDegrees(pose.heading());
 
         double turretAngle = globalAngleToGoal - robotHeading;
 
@@ -134,7 +134,7 @@ public class Turret {
     public double distanceToGoalMeters(Pose pose) {
         double goalX  = isRed ? RED_GOAL_X : BLUE_GOAL_X;
         double goalY  = isRed ? RED_GOAL_Y : BLUE_GOAL_Y;
-        double inches = Math.hypot(goalX - pose.getX(), goalY - pose.getY());
+        double inches = Math.hypot(goalX - pose.x(), goalY - pose.y());
         return inches * 0.0254;
     }
 

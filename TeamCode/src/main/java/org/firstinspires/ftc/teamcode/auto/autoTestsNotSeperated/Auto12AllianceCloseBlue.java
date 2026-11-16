@@ -1,5 +1,8 @@
 package org.firstinspires.ftc.teamcode.auto.autoTestsNotSeperated;
 
+import static com.pedropathing.api.Paths.line;
+import static com.pedropathing.api.Paths.curve;
+
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.util.ElapsedTime;
@@ -8,7 +11,7 @@ import com.bylazar.telemetry.TelemetryManager;
 import com.bylazar.telemetry.PanelsTelemetry;
 import java.util.Locale;
 
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
+import org.firstinspires.ftc.teamcode.pedro.Constants;
 import org.firstinspires.ftc.teamcode.subsystems.AutoToTeleTransfer;
 import org.firstinspires.ftc.teamcode.subsystems.Intake;
 import org.firstinspires.ftc.teamcode.subsystems.Shooter;
@@ -17,10 +20,8 @@ import org.firstinspires.ftc.teamcode.subsystems.Turret;
 import org.firstinspires.ftc.teamcode.subsystems.Limelight;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.BezierCurve;
-import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.geometry.Pose;
-import com.pedropathing.paths.PathChain;
+import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
 
 /**
  * Auto12AllianceCloseBlue — 12-ball alliance close-side autonomous, BLUE.
@@ -142,9 +143,9 @@ public class Auto12AllianceCloseBlue extends OpMode {
     @Override
     public void init() {
         panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
-        follower = Constants.createFollower(hardwareMap);
+        follower = Constants.create(hardwareMap);
         // Red starts at (115.789, 132.895, 37°) → Blue mirrors to (28.211, 132.895, 143°)
-        follower.setStartingPose(new Pose(28.211, 132.895, Math.toRadians(143)));
+        follower.setPose(new Pose(28.211, 132.895, Math.toRadians(143)));
         limelight = new Limelight(hardwareMap, IS_RED);
         intake    = new Intake(hardwareMap);
         shooter   = new Shooter(hardwareMap);
@@ -166,20 +167,20 @@ public class Auto12AllianceCloseBlue extends OpMode {
         turretPidTimer.reset();
         spinupTimer.reset();
         state = AutoState.INITIAL_SPINUP;
-        AutoToTeleTransfer.finalPose = follower.getPose();
+        AutoToTeleTransfer.finalPose = follower.pose();
     }
 
     @Override
     public void loop() {
         follower.update();
         shooter.periodic();
-        turret.update(follower.getPose());
+        turret.update(follower.pose());
         updateTurretOdom();
         lights.update(shooter.isActive(), shooter.getRPMMode(), isAligned(), 0);
         autonomousUpdate();
-        AutoToTeleTransfer.finalPose = follower.getPose();
+        AutoToTeleTransfer.finalPose = follower.pose();
         panelsTelemetry.debug("State",        state.name());
-        panelsTelemetry.debug("T",            String.format(Locale.US, "%.3f", follower.getCurrentTValue()));
+        panelsTelemetry.debug("T",            String.format(Locale.US, "%.3f", follower.parametricCompletion()));
         panelsTelemetry.debug("PathTimer",    String.format(Locale.US, "%.2f / %.1f", pathTimer.seconds(), currentPathTimeout));
         panelsTelemetry.debug("Shoot",        String.format(Locale.US, "%.0f / %.0f ms", shootTimer.milliseconds(), SHOOT_MS));
         panelsTelemetry.debug("GateTimer ms", String.format(Locale.US, "%.0f / %.0f", gateOpenTimer.milliseconds(), GATE_OPEN_DWELL_MS));
@@ -189,24 +190,24 @@ public class Auto12AllianceCloseBlue extends OpMode {
         panelsTelemetry.debug("Intake",       intake.getCurrentMode().toString());
         panelsTelemetry.debug("TurretSrv",    String.format(Locale.US, "%.3f", turretServoPos));
         panelsTelemetry.debug("Aligned",      isTurretAligned());
-        panelsTelemetry.debug("X",            follower.getPose().getX());
-        panelsTelemetry.debug("Y",            follower.getPose().getY());
+        panelsTelemetry.debug("X",            follower.pose().x());
+        panelsTelemetry.debug("Y",            follower.pose().y());
         panelsTelemetry.update(telemetry);
     }
 
     @Override
     public void stop() {
         shooter.stop(); intake.stop(); lights.off();
-        AutoToTeleTransfer.finalPose = follower.getPose();
+        AutoToTeleTransfer.finalPose = follower.pose();
     }
 
     // =========================================================================
     //  TURRET ODOM TRACKING
     // =========================================================================
     private void updateTurretOdom() {
-        Pose p = follower.getPose();
-        double angle = Math.toDegrees(Math.atan2(GOAL_Y - p.getY(), GOAL_X - p.getX()))
-                - Math.toDegrees(p.getHeading());
+        Pose p = follower.pose();
+        double angle = Math.toDegrees(Math.atan2(GOAL_Y - p.y(), GOAL_X - p.x()))
+                - Math.toDegrees(p.heading());
         while (angle >  180) angle -= 360;
         while (angle < -180) angle += 360;
         angle = Math.max(-TURRET_MAX_ANGLE, Math.min(TURRET_MAX_ANGLE, angle));
@@ -227,9 +228,9 @@ public class Auto12AllianceCloseBlue extends OpMode {
     }
 
     private boolean isTurretAligned() {
-        Pose p = follower.getPose();
-        double rel = Math.toDegrees(Math.atan2(GOAL_Y - p.getY(), GOAL_X - p.getX()))
-                - Math.toDegrees(p.getHeading());
+        Pose p = follower.pose();
+        double rel = Math.toDegrees(Math.atan2(GOAL_Y - p.y(), GOAL_X - p.x()))
+                - Math.toDegrees(p.heading());
         while (rel >  180) rel -= 360;
         while (rel < -180) rel += 360;
         double desired = Math.max(-TURRET_MAX_ANGLE, Math.min(TURRET_MAX_ANGLE, rel));
@@ -239,11 +240,11 @@ public class Auto12AllianceCloseBlue extends OpMode {
     // =========================================================================
     //  PATH HELPERS
     // =========================================================================
-    private void followShoot(PathChain p, double t)    { follower.setMaxPower(SHOOT_PATH_SPEED);  follower.followPath(p, true);  pathTimer.reset(); currentPathTimeout = t; }
-    private void followIntake(PathChain p, double t)   { follower.setMaxPower(INTAKE_PATH_SPEED); follower.followPath(p, false); pathTimer.reset(); currentPathTimeout = t; }
-    private void followGateOpen(PathChain p, double t) { follower.setMaxPower(GATE_OPEN_SPEED);   follower.followPath(p, false); pathTimer.reset(); currentPathTimeout = t; }
+    private void followShoot(Path p, double t)    { Constants.setMaxPathPower(SHOOT_PATH_SPEED);  follower.holdEnd.set(true); follower.follow(p);  pathTimer.reset(); currentPathTimeout = t; }
+    private void followIntake(Path p, double t)   { Constants.setMaxPathPower(INTAKE_PATH_SPEED); follower.holdEnd.set(false); follower.follow(p); pathTimer.reset(); currentPathTimeout = t; }
+    private void followGateOpen(Path p, double t) { Constants.setMaxPathPower(GATE_OPEN_SPEED);   follower.holdEnd.set(false); follower.follow(p); pathTimer.reset(); currentPathTimeout = t; }
 
-    private boolean pathDone()      { return follower.getCurrentTValue() >= 0.95 || !follower.isBusy() || pathTimer.seconds() >= currentPathTimeout; }
+    private boolean pathDone()      { return follower.parametricCompletion() >= 0.95 || !follower.isBusy() || pathTimer.seconds() >= currentPathTimeout; }
     private boolean shootPathDone() { return !follower.isBusy() || pathTimer.seconds() >= currentPathTimeout; }
 
     private boolean isAligned() {
@@ -303,7 +304,7 @@ public class Auto12AllianceCloseBlue extends OpMode {
             case GATEOPEN1_PATH:
                 intake.setMode(Intake.Mode.INTAKE);
                 if (pathDone()) {
-                    follower.breakFollowing();
+                    follower.stop();
                     gateOpenTimer.reset();
                     state = AutoState.GATEOPEN1_DWELL;
                 }
@@ -356,7 +357,7 @@ public class Auto12AllianceCloseBlue extends OpMode {
             case GATEOPEN2_PATH:
                 intake.setMode(Intake.Mode.INTAKE);
                 if (pathDone()) {
-                    follower.breakFollowing();
+                    follower.stop();
                     gateOpenTimer.reset();
                     state = AutoState.GATEOPEN2_DWELL;
                 }
@@ -409,7 +410,7 @@ public class Auto12AllianceCloseBlue extends OpMode {
             case GATEOPEN3_PATH:
                 intake.setMode(Intake.Mode.INTAKE);
                 if (pathDone()) {
-                    follower.breakFollowing();
+                    follower.stop();
                     gateOpenTimer.reset();
                     state = AutoState.GATEOPEN3_DWELL;
                 }
@@ -456,90 +457,63 @@ public class Auto12AllianceCloseBlue extends OpMode {
     //  Blue start: (28.211,  132.895, 143°)
     // =========================================================================
     public static class Paths {
-        public PathChain shoot0;
-        public PathChain intake1, gateopen1, shoot1;
-        public PathChain intake2, gateopen2, shoot2;
-        public PathChain intake3, gateopen3, shoot3;
+        public Path shoot0;
+        public Path intake1, gateopen1, shoot1;
+        public Path intake2, gateopen2, shoot2;
+        public Path intake3, gateopen3, shoot3;
 
         public Paths(Follower f) {
             // Red:  (115.789,132.895) → (88.316,88.737)  heading 37°→37°
             // Blue: (28.211,132.895)  → (55.684,88.737)  heading 143°→143°
-            shoot0 = f.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(28.211, 132.895), new Pose(55.684, 88.737)))
-                    .setLinearHeadingInterpolation(Math.toRadians(143), Math.toRadians(143))
-                    .build();
+            shoot0 = line(
+                            new Pose(28.211, 132.895), new Pose(55.684, 88.737)).linear(Math.toRadians(143), Math.toRadians(143));
 
             // Red intake1:  (88.316,88.737) curve → (99.474,83.711) → (127.474,83.737)  tangent
             // Blue intake1: (55.684,88.737) curve → (44.526,83.711) → (16.526,83.737)   tangent
-            intake1 = f.pathBuilder()
-                    .addPath(new BezierCurve(
-                            new Pose(55.684, 88.737), new Pose(44.526, 83.711), new Pose(16.526, 83.737)))
-                    .setTangentHeadingInterpolation().build();
+            intake1 = curve(
+                            new Pose(55.684, 88.737), new Pose(44.526, 83.711), new Pose(16.526, 83.737)).tangent();
 
             // Red gateopen1:  (127.474,83.737) curve → (110.763,75.500) → (127.632,75.842)  heading 0°→0°
             // Blue gateopen1: (16.526,83.737)  curve → (33.237,75.500)  → (16.368,75.842)   heading 180°→180°
-            gateopen1 = f.pathBuilder()
-                    .addPath(new BezierCurve(
-                            new Pose(16.526, 83.737), new Pose(33.237, 75.500), new Pose(16.368, 75.842)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
-                    .build();
+            gateopen1 = curve(
+                            new Pose(16.526, 83.737), new Pose(33.237, 75.500), new Pose(16.368, 75.842)).linear(Math.toRadians(180), Math.toRadians(180));
 
             // Red shoot1:  (110.632,75.842) curve → (88.184,94.079) → (88.316,88.316)  heading 0°→30°
             // Blue shoot1: (33.368,75.842)  curve → (55.816,94.079) → (55.684,88.316)  heading 180°→150°
-            shoot1 = f.pathBuilder()
-                    .addPath(new BezierCurve(
-                            new Pose(33.368, 75.842), new Pose(55.816, 94.079), new Pose(55.684, 88.316)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(150))
-                    .build();
+            shoot1 = curve(
+                            new Pose(33.368, 75.842), new Pose(55.816, 94.079), new Pose(55.684, 88.316)).linear(Math.toRadians(180), Math.toRadians(150));
 
             // Red intake2:  (88.316,88.316) curve → (85.737,47.105) → (94.053,61.263) → (124.868,59.605) → (128.000,59.474)  tangent
             // Blue intake2: (55.684,88.316) curve → (58.263,47.105) → (49.947,61.263) → (19.132,59.605)  → (16.000,59.474)   tangent
-            intake2 = f.pathBuilder()
-                    .addPath(new BezierCurve(
+            intake2 = curve(
                             new Pose(55.684, 88.316), new Pose(58.263, 47.105), new Pose(49.947, 61.263),
-                            new Pose(19.132, 59.605),  new Pose(16.000, 59.474)))
-                    .setTangentHeadingInterpolation().build();
+                            new Pose(19.132, 59.605),  new Pose(16.000, 59.474)).tangent();
 
             // Red gateopen2:  (128.000,59.474) curve → (111.263,75.579) → (127.526,64.684)  heading 0°→0°
             // Blue gateopen2: (16.000,59.474)  curve → (32.737,75.579)  → (16.474,64.684)   heading 180°→180°
-            gateopen2 = f.pathBuilder()
-                    .addPath(new BezierCurve(
-                            new Pose(16.000, 59.474), new Pose(32.737, 75.579), new Pose(16.474, 64.684)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
-                    .build();
+            gateopen2 = curve(
+                            new Pose(16.000, 59.474), new Pose(32.737, 75.579), new Pose(16.474, 64.684)).linear(Math.toRadians(180), Math.toRadians(180));
 
             // Red shoot2:  (111.526,75.684) → (88.000,88.211)  heading 0°→30°
             // Blue shoot2: (32.474,75.684)  → (56.000,88.211)  heading 180°→150°
-            shoot2 = f.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(32.474, 75.684), new Pose(56.000, 88.211)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(150))
-                    .build();
+            shoot2 = line(
+                            new Pose(32.474, 75.684), new Pose(56.000, 88.211)).linear(Math.toRadians(180), Math.toRadians(150));
 
             // Red intake3:  (88.000,88.211) curve → (85.184,49.500) → (82.816,50.816) → (134.579,48.263)  tangent
             // Blue intake3: (56.000,88.211) curve → (58.816,49.500) → (61.184,50.816) → (9.421,48.263)    tangent
-            intake3 = f.pathBuilder()
-                    .addPath(new BezierCurve(
+            intake3 = curve(
                             new Pose(56.000, 88.211), new Pose(58.816, 49.500),
-                            new Pose(61.184, 50.816), new Pose( 9.421, 48.263)))
-                    .setTangentHeadingInterpolation().build();
+                            new Pose(61.184, 50.816), new Pose( 9.421, 48.263)).tangent();
 
             // Red gateopen3:  (134.579,48.263) curve → (111.605,73.789) → (127.579,64.105)  heading 0°→0°
             // Blue gateopen3: (9.421,48.263)   curve → (32.395,73.789)  → (16.421,64.105)   heading 180°→180°
-            gateopen3 = f.pathBuilder()
-                    .addPath(new BezierCurve(
-                            new Pose( 9.421, 48.263), new Pose(32.395, 73.789), new Pose(16.421, 64.105)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(180))
-                    .build();
+            gateopen3 = curve(
+                            new Pose( 9.421, 48.263), new Pose(32.395, 73.789), new Pose(16.421, 64.105)).linear(Math.toRadians(180), Math.toRadians(180));
 
             // Red shoot3:  (111.579,73.105) → (86.632,109.316)  heading 0°→10°
             // Blue shoot3: (32.421,73.105)  → (57.368,109.316)  heading 180°→170°
-            shoot3 = f.pathBuilder()
-                    .addPath(new BezierLine(
-                            new Pose(32.421, 73.105), new Pose(57.368, 109.316)))
-                    .setLinearHeadingInterpolation(Math.toRadians(180), Math.toRadians(170))
-                    .build();
+            shoot3 = line(
+                            new Pose(32.421, 73.105), new Pose(57.368, 109.316)).linear(Math.toRadians(180), Math.toRadians(170));
         }
     }
 }
