@@ -1,9 +1,6 @@
 package org.firstinspires.ftc.teamcode;
 
-import com.pedropathing.controllers.Controller;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.follower.ManualDrive;
-import com.pedropathing.drivetrain.DrivePowers;
 import com.pedropathing.math.Pose;
 import com.pedropathing.math.Velocity;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
@@ -20,21 +17,24 @@ public class DriveTeleOp extends OpMode {
     private DcMotor intake;
     // Pedro Pathing follower: uses the autotuned Pinpoint + heading values from pedro/Constants.java
     private Follower follower;
-    private Controller headingController;
 
-    // Heading lock: when the turn stick is released, Pedro keeps the robot pointed the same way
+    // Heading hold: when the turn stick is released, the robot keeps pointing the same way
+    // so strafing goes straight instead of curving. (Position hold was removed; it fought strafing.)
     private double targetHeading = 0;
+    private boolean headingLocked = false;
     private static final double SETTLE_TURN_SPEED = 0.5; // rad/s; lock starts once the robot stops spinning
-
-    // Position hold: when ALL sticks/triggers are released and the robot has stopped,
-    // Pedro holds it in that spot. Set to false to turn it off.
-    private static final boolean POSITION_HOLD = true;
-    private static final double HOLD_SPEED = 2.0; // in/s; robot must be slower than this to start holding
+    // Turn power per radian of heading error. Too low = still curves; too high = robot wiggles.
+    private static final double HEADING_KP = 1.5;
+    // Max turn power heading hold may use
+    private static final double MAX_HEADING_CORRECTION = 0.4;
 
     // Turning: the robot needs some power before it starts to rotate, so any stick push
     // starts at TURN_MIN power and rises to TURN_MAX at full stick.
     private static final double TURN_MIN = 0.2;  // raise if small stick pushes still don't turn
     private static final double TURN_MAX = 1.0;  // lower if full-stick turning is too fast
+
+    // Driving speed for R2/L2 and the left stick: 1.0 = full speed, 0.5 = half speed
+    private static final double DRIVE_SPEED = 0.7;//HERE SPEED YOU CAN CHANGE LATER GOES 0-1
 
     private double intakePower = 0;  // 0.9 = in, -0.9 = out, 0 = off
     private boolean lastDpadUp = false;
@@ -88,7 +88,6 @@ public class DriveTeleOp extends OpMode {
         // Pedro sets up the drive motors and the Pinpoint from pedro/Constants.java
         follower = Constants.create(hardwareMap);
         follower.setPose(new Pose(0, 0, 0)); // robot must be still during init
-        headingController = Constants.foresightConfig.headingFeedback.get(); // tuned heading gain
     }
 
     @Override
@@ -129,42 +128,39 @@ public class DriveTeleOp extends OpMode {
         }
 
         // Pedro directions: forward +, strafe left +, turn left (counter-clockwise) +
-        double forward =  gamepad1.right_trigger - gamepad1.left_trigger; // R2 = forward, L2 = backward
-        double strafe  = -gamepad1.left_stick_x;  // left stick: push right = strafe right
+        double forward = (gamepad1.right_trigger - gamepad1.left_trigger) * DRIVE_SPEED; // R2 = forward, L2 = backward
+        double strafe  = -gamepad1.left_stick_x * DRIVE_SPEED;  // left stick: push right = strafe right
         double turnIn  = -gamepad1.right_stick_x; // right stick: push right = turn right
 
         follower.update(); // reads the Pinpoint and drives the motors
         Pose pose = follower.pose();
         double heading = pose.heading();
         Velocity vel = follower.velocity();
-        double speed = Math.hypot(vel.vx, vel.vy);
 
-        boolean turning  = Math.abs(turnIn) > 0.05;
-        boolean driving  = Math.abs(forward) > 0.05 || Math.abs(strafe) > 0.05;
+        boolean turning = Math.abs(turnIn) > 0.05;
         String driveMode;
+        double turn;
 
         if (turning) {
-            // Driver is turning: boost so it starts turning right away, and remember the new direction
-            double turn = Math.signum(turnIn) * (TURN_MIN + (TURN_MAX - TURN_MIN) * (Math.abs(turnIn) - 0.05) / 0.95);
-            targetHeading = heading;
-            follower.manual(forward, strafe, turn);
+            // Driver is turning: boost so it starts turning right away
+            turn = Math.signum(turnIn) * (TURN_MIN + (TURN_MAX - TURN_MIN) * (Math.abs(turnIn) - 0.05) / 0.95);
+            headingLocked = false;
             driveMode = "TURNING";
-        } else if (Math.abs(vel.omega) > SETTLE_TURN_SPEED) {
+        } else if (!headingLocked && Math.abs(vel.omega) > SETTLE_TURN_SPEED) {
             // Just let go of the turn stick and still spinning: let it stop before locking
-            targetHeading = heading;
-            follower.manual(forward, strafe, 0);
+            turn = 0;
             driveMode = "SETTLING";
-        } else if (driving || !POSITION_HOLD || speed > HOLD_SPEED) {
-            // Driving without turning: Pedro's heading lock keeps it pointed at targetHeading
-            DrivePowers powers = ManualDrive.headingLock(follower, headingController,
-                    new DrivePowers(forward, strafe, 0), targetHeading);
-            follower.manual(powers);
-            driveMode = "HEADING LOCK";
         } else {
-            // Sticks released and robot stopped: hold this spot (starts once, then Pedro keeps it there)
-            if (!follower.holding()) follower.hold(new Pose(pose.x(), pose.y(), targetHeading));
-            driveMode = "POSITION HOLD";
+            // Not turning: lock this heading and gently correct any drift
+            if (!headingLocked) {
+                targetHeading = heading;
+                headingLocked = true;
+            }
+            double error = Math.atan2(Math.sin(targetHeading - heading), Math.cos(targetHeading - heading));
+            turn = Math.max(-MAX_HEADING_CORRECTION, Math.min(MAX_HEADING_CORRECTION, HEADING_KP * error));
+            driveMode = "HEADING HOLD";
         }
+        follower.manual(forward, strafe, turn);
 
         // D-pad up = intake forward, D-pad down = reverse; press the same button again to stop
         if (gamepad1.dpad_up && !lastDpadUp)     intakePower = (intakePower == 0.9) ? 0 : 0.9;
